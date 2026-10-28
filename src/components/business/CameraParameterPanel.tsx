@@ -54,10 +54,21 @@ export function ParameterWheel({ value, max, disabled, label, valueText, formatV
     if (next === value) return;
     latest.current = next; setPosition(next); onChange(next); onCommit(next);
   };
-  const radius = Math.ceil(width / spacing / 2) + 1;
+  // Project the markings onto a cylinder: the sides compress and turn out of view.
+  const drumRadius = Math.max(1, width / 2);
+  const project = (offset: number) => {
+    const angle = offset / drumRadius;
+    if (Math.abs(angle) >= Math.PI / 2) return null;
+    const depth = Math.cos(angle);
+    return { left: drumRadius + drumRadius * Math.sin(angle), depth };
+  };
+  const radius = Math.ceil(drumRadius * Math.PI / 2 / spacing) + 1;
   const center = Math.floor(position);
   const ticks = Array.from({ length: radius * 2 + 1 }, (_, index) => center + index - radius);
-  const ribs = Array.from({ length: Math.ceil(width / 8) + 3 }, (_, index) => index * 8 - (position * spacing % 8) - 8);
+  const ribSpacing = 7;
+  const ribRadius = Math.ceil(drumRadius * Math.PI / 2 / ribSpacing) + 1;
+  const ribs = Array.from({ length: ribRadius * 2 + 1 }, (_, index) =>
+    project((index - ribRadius) * ribSpacing - (position * spacing % ribSpacing)));
   return (
     <View style={[styles.wheelRow, disabled && styles.disabled]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${label}减小一格`} disabled={disabled || value <= 0}
@@ -72,7 +83,6 @@ export function ParameterWheel({ value, max, disabled, label, valueText, formatV
         if (event.nativeEvent.actionName === 'increment') step(1);
         else if (event.nativeEvent.actionName === 'decrement') step(-1);
       }}
-      onLayout={event => setWidth(event.nativeEvent.layout.width)}
       onStartShouldSetResponder={() => !disabled} onMoveShouldSetResponder={() => !disabled}
       onResponderGrant={event => {
         dragging.current = true;
@@ -88,22 +98,35 @@ export function ParameterWheel({ value, max, disabled, label, valueText, formatV
       onResponderTerminationRequest={() => false}
       style={styles.wheelControl}>
       <View pointerEvents="none" style={styles.wheelPointer} />
-      <View pointerEvents="none" style={styles.wheelDrum}>
-        <LinearGradient colors={['#494640', '#26241F', '#181612', '#39362F']} locations={[0, 0.32, 0.7, 1]} style={StyleSheet.absoluteFillObject} />
-        {ribs.map((left, index) => <View key={`rib-${index}`} style={[styles.wheelRib, { left }]} />)}
+      <LinearGradient pointerEvents="none" colors={['#B0B0AA', '#4B4D49', '#1A1D1C', '#8B8D86']} locations={[0, 0.15, 0.8, 1]} style={styles.wheelHousing}>
+      <View style={styles.wheelDrum} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
+        <LinearGradient colors={['#151918', '#555D5A', '#353C39', '#111513']} locations={[0, 0.3, 0.6, 1]} style={StyleSheet.absoluteFillObject} />
+        {ribs.map((rib, index) => rib && <LinearGradient key={`rib-${index}`}
+          colors={['#090D0B', '#4A524E', '#7D8580', '#222824', '#070B09']}
+          locations={[0, 0.25, 0.42, 0.7, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={[styles.wheelRib, { left: rib.left, width: Math.max(1, 5 * rib.depth), opacity: 0.3 + 0.7 * rib.depth }]} />)}
+        <LinearGradient colors={['rgba(0,0,0,0.75)', 'rgba(255,255,245,0.10)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.68)']}
+          locations={[0, 0.33, 0.48, 1]} style={StyleSheet.absoluteFillObject} />
         {ticks.map(tick => {
+          const surface = project((tick - position) * spacing);
+          if (!surface) return null;
           const valid = tick >= 0 && tick <= max;
           const major = tick % majorEvery === 0;
           const selected = valid && tick === Math.round(position);
-          return <View key={tick} style={[styles.wheelGroove, { left: width / 2 + (tick - position) * spacing }]}>
+          return <View key={tick} style={[styles.wheelGroove, { left: surface.left, opacity: 0.2 + surface.depth * 0.8, transform: [{ scaleX: surface.depth }] }]}>
             {valid && <View style={[styles.wheelTick, major && styles.wheelMajorTick, selected && styles.wheelSelectedTick]} />}
             {valid && major && <Text style={[styles.wheelNumber, selected && styles.wheelSelectedNumber]} numberOfLines={1}>{formatValue(tick)}</Text>}
           </View>;
         })}
-        <View style={[styles.wheelSelection, { width: Math.min(40, spacing), marginLeft: -Math.min(40, spacing) / 2 }]} />
+        <View style={styles.wheelSelection} />
         <LinearGradient colors={['rgba(12,11,9,0.92)', 'rgba(12,11,9,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.wheelShadeLeft} />
         <LinearGradient colors={['rgba(12,11,9,0)', 'rgba(12,11,9,0.92)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.wheelShadeRight} />
+        <View style={styles.wheelTopRim} />
+        <View style={styles.wheelBottomRim} />
+        <LinearGradient colors={['#101512', '#535B55', '#151B16']} style={[styles.wheelEndCap, styles.wheelEndCapLeft]} />
+        <LinearGradient colors={['#101512', '#535B55', '#151B16']} style={[styles.wheelEndCap, styles.wheelEndCapRight]} />
       </View>
+      </LinearGradient>
       <View pointerEvents="none" style={styles.wheelIndex} />
     </View>
       <Pressable accessibilityRole="button" accessibilityLabel={`${label}增大一格`} disabled={disabled || value >= max}
@@ -217,22 +240,28 @@ const styles = StyleSheet.create({
   readout: { alignItems: 'center', marginTop: 26, gap: 4 },
   value: { color: colors.ink, fontSize: 32, fontWeight: '600', fontVariant: ['tabular-nums'] },
   unit: { color: colors.subtle, fontSize: 12 },
-  wheelRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 18 },
+  wheelRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 12 },
   wheelStep: { width: 36, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceContainer, borderWidth: 1, borderColor: colors.line },
-  wheelControl: { flex: 1, height: 100, justifyContent: 'center' },
-  wheelDrum: { height: 76, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#15130F', backgroundColor: '#26241F' },
+  wheelControl: { flex: 1, height: 60, justifyContent: 'center' },
+  wheelHousing: { height: 44, padding: 2, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 3, elevation: 2 },
+  wheelDrum: { height: 40, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#0B100D', backgroundColor: '#262D28' },
   wheelGroove: { position: 'absolute', top: 0, bottom: 0, width: 64, marginLeft: -32, alignItems: 'center' },
-  wheelRib: { position: 'absolute', top: 0, bottom: 0, width: 3, borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.09)', borderRightWidth: 1, borderRightColor: 'rgba(0,0,0,0.55)' },
-  wheelTick: { position: 'absolute', top: 13, height: 10, width: 1, backgroundColor: '#8E8779' },
-  wheelMajorTick: { height: 18, width: 2, backgroundColor: '#CEC4AD' },
+  wheelRib: { position: 'absolute', top: 0, bottom: 0, borderRadius: 1 },
+  wheelTick: { position: 'absolute', top: 6, height: 6, width: 1, backgroundColor: '#8E8779' },
+  wheelMajorTick: { height: 11, width: 2, backgroundColor: '#CEC4AD' },
   wheelSelectedTick: { backgroundColor: colors.secondaryContainer },
-  wheelNumber: { position: 'absolute', top: 40, width: 64, textAlign: 'center', fontSize: 10, color: '#C9C0AC', fontVariant: ['tabular-nums'] },
+  wheelNumber: { position: 'absolute', top: 22, width: 64, textAlign: 'center', fontSize: 9, lineHeight: 12, color: '#DDD9CD', fontVariant: ['tabular-nums'], textShadowColor: '#000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 },
   wheelSelectedNumber: { color: colors.secondaryContainer, fontWeight: '700' },
-  wheelSelection: { position: 'absolute', left: '50%', top: 0, bottom: 0, backgroundColor: 'rgba(254,221,132,0.08)' },
-  wheelShadeLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '25%' },
-  wheelShadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: '25%' },
-  wheelPointer: { position: 'absolute', zIndex: 1, top: 1, left: '50%', marginLeft: -5, width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 7, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.secondary },
-  wheelIndex: { position: 'absolute', bottom: 4, left: '50%', marginLeft: -1, width: 2, height: 8, borderRadius: 1, backgroundColor: colors.secondary },
+  wheelSelection: { position: 'absolute', left: '50%', top: 2, bottom: 2, width: 1, backgroundColor: 'rgba(254,221,132,0.24)' },
+  wheelShadeLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '22%' },
+  wheelShadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: '22%' },
+  wheelTopRim: { position: 'absolute', left: 5, right: 5, top: 0, height: 1, backgroundColor: 'rgba(225,230,219,0.35)' },
+  wheelBottomRim: { position: 'absolute', left: 5, right: 5, bottom: 0, height: 2, backgroundColor: 'rgba(0,0,0,0.7)' },
+  wheelEndCap: { position: 'absolute', top: 1, bottom: 1, width: 5, borderColor: 'rgba(0,0,0,0.7)' },
+  wheelEndCapLeft: { left: 0, borderRightWidth: 1, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  wheelEndCapRight: { right: 0, borderLeftWidth: 1, borderTopRightRadius: 8, borderBottomRightRadius: 8 },
+  wheelPointer: { position: 'absolute', zIndex: 1, top: 2, left: '50%', marginLeft: -4, width: 0, height: 0, borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.secondary },
+  wheelIndex: { position: 'absolute', bottom: 2, left: '50%', marginLeft: -1, width: 2, height: 6, borderRadius: 1, backgroundColor: colors.secondary },
   endpoints: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 8 },
   endpoint: { color: colors.subtle, fontSize: 11 },
   feedback: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 22 },

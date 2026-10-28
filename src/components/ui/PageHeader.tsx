@@ -11,7 +11,7 @@ import { colors, shadows } from '../../constants/theme';
 
 type Props = {
   title: string;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap | null;
   onPress?: () => void;
 };
 
@@ -29,7 +29,7 @@ export function PageHeader({ title, icon = 'options-outline', onPress }: Props) 
       </View>
 
       <View style={styles.actions}>
-        {onPress ? (
+        {icon && (onPress ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="页面操作"
@@ -42,7 +42,7 @@ export function PageHeader({ title, icon = 'options-outline', onPress }: Props) 
           <View style={styles.iconButton}>
             <Ionicons name={icon} size={21} color={colors.onSurfaceVariant} />
           </View>
-        )}
+        ))}
 
         <View style={styles.avatarWrap}>
           <Image

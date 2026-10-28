@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, shadows } from '../../constants/theme';
 import { CAMERA_STYLES } from '../../constants/guidance';
 import { useCaptureStore } from '../../store/captureStore';
@@ -25,8 +27,12 @@ const utilities = [
   { title: '关于Drama相机', icon: 'information-circle-outline' },
 ] as const;
 
+const ABOUT_TEXT = 'AI相机应用，实时在取景框AI提示，为了解决很多人拍照找不到机位和相机参数，为了让每个人都能快乐的拍照，为了男生能给女朋友美美拍照。只希望这个小小的应用能解决一点你的问题';
+
 export function ProfilePage() {
   const router = useRouter();
+  const [dialog, setDialog] = useState<'feedback' | 'about' | null>(null);
+  const closeDialog = () => setDialog(null);
   const savedCount = useCaptureStore((state) => state.savedUris.length);
   const favoriteCount = useCaptureStore((state) => state.favoriteUris.length);
   const styleCount = Object.keys(CAMERA_STYLES).length;
@@ -36,6 +42,10 @@ export function ProfilePage() {
       router.push('/settings/ai');
     } else if (title === '我的作品' || title === '收藏的灵感') {
       router.navigate('/album');
+    } else if (title === '意见反馈') {
+      setDialog('feedback');
+    } else if (title === '关于Drama相机') {
+      setDialog('about');
     } else {
       Alert.alert(title, '这个入口会在下一版开放。');
     }
@@ -44,7 +54,7 @@ export function ProfilePage() {
   return (
     <View style={styles.screen}>
       <View style={styles.fixedHeader}>
-        <PageHeader title="设置" icon="options-outline" />
+        <PageHeader title="设置" icon={null} />
       </View>
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -68,7 +78,7 @@ export function ProfilePage() {
 
             <View style={styles.heroInfo}>
               <View style={styles.nameRow}>
-                <Text style={styles.name} numberOfLines={1}>林晨 (Chen Lin)</Text>
+                <Text style={styles.name} numberOfLines={1}>摄影师</Text>
               </View>
               <Text style={styles.heroDesc} numberOfLines={1}>摄影创作者</Text>
               <View style={styles.cloudRow}>
@@ -124,11 +134,132 @@ export function ProfilePage() {
           <Text style={styles.buildText}>Drama相机 · MIT License · © 2026 Tommy_Cui</Text>
         </View>
       </ScrollView>
+
+      <Modal visible={dialog !== null} transparent animationType="fade" onRequestClose={closeDialog}>
+        {dialog && (
+          <SafeAreaView style={styles.dialogBackdrop} edges={['top', 'bottom']}>
+            <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="关闭弹窗" onPress={closeDialog} />
+            <View style={styles.dialogCard} accessibilityViewIsModal>
+              <View style={styles.dialogHeader}>
+                <View style={styles.dialogIcon}>
+                  <Ionicons name={dialog === 'feedback' ? 'mail-outline' : 'camera-outline'} size={24} color={colors.secondary} />
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={closeDialog} style={styles.dialogClose}>
+                  <Ionicons name="close" size={22} color={colors.onSurfaceVariant} />
+                </Pressable>
+              </View>
+              <Text accessibilityRole="header" style={styles.dialogTitle}>{dialog === 'feedback' ? '意见反馈' : '关于Drama相机'}</Text>
+              <ScrollView style={styles.dialogBody} contentContainerStyle={styles.dialogBodyContent}>
+                {dialog === 'feedback' ? (
+                  <>
+                    <Text style={styles.dialogDescription}>欢迎把你的建议或使用中遇到的问题发送到邮箱：</Text>
+                    <View style={styles.emailCard}>
+                      <Text selectable style={styles.emailAddress}>tommy_cui@foxmail.com</Text>
+                    </View>
+                  </>
+                ) : (
+                  <Text selectable style={styles.dialogDescription}>{ABOUT_TEXT}</Text>
+                )}
+              </ScrollView>
+              <Pressable accessibilityRole="button" onPress={closeDialog} style={({ pressed }) => [styles.dialogConfirm, pressed && styles.dialogConfirmPressed]}>
+                <Text style={styles.dialogConfirmText}>知道了</Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        )}
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  dialogBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    backgroundColor: 'rgba(24, 22, 18, 0.42)',
+  },
+  dialogCard: {
+    width: '100%',
+    maxWidth: 400,
+    flexShrink: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 28,
+    padding: 24,
+    ...shadows.glassLg,
+  },
+  dialogHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  dialogIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: colors.butterWarm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogClose: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: colors.surfaceContainer,
+  },
+  dialogTitle: {
+    color: colors.primary,
+    fontSize: 21,
+    fontWeight: '600',
+    marginBottom: 14,
+  },
+  dialogBody: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  dialogBodyContent: {
+    paddingBottom: 4,
+  },
+  dialogDescription: {
+    color: colors.onSurfaceVariant,
+    fontSize: 14,
+    lineHeight: 26,
+  },
+  emailCard: {
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginTop: 16,
+  },
+  emailAddress: {
+    color: colors.primary,
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  dialogConfirm: {
+    marginTop: 24,
+    minHeight: 48,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 24,
+  },
+  dialogConfirmPressed: {
+    opacity: 0.8,
+  },
+  dialogConfirmText: {
+    color: colors.whiteWarm,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.surface,
