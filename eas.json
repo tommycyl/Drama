@@ -1,7 +1,16 @@
 {
+  "cli": {
+    "appVersionSource": "local"
+  },
   "build": {
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "github": {
+      "extends": "production",
       "android": {
         "buildType": "apk"
       }

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  ActivityIndicator,
   Image,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +20,8 @@ import { colors, shadows } from '../../constants/theme';
 import { CAMERA_STYLES } from '../../constants/guidance';
 import { useCaptureStore } from '../../store/captureStore';
 import { PageHeader } from '../ui/PageHeader';
+import { useAppUpdate } from '../../hooks/useAppUpdate';
+import { supportsAppInstallation } from '../../lib/appInstaller';
 
 const utilities = [
   { title: 'AI 配置', icon: 'options-outline' },
@@ -31,8 +36,16 @@ const ABOUT_TEXT = 'AI相机应用，实时在取景框AI提示，为了解决�
 
 export function ProfilePage() {
   const router = useRouter();
-  const [dialog, setDialog] = useState<'feedback' | 'about' | null>(null);
-  const closeDialog = () => setDialog(null);
+  const [dialog, setDialog] = useState<'feedback' | 'about' | 'update' | null>(null);
+  const update = useAppUpdate();
+  const closeDialog = () => { update.cancel(); setDialog(null); };
+  const downloading = update.phase === 'downloading' || update.phase === 'verifying';
+  const installReady = ['permission', 'downloaded', 'opened'].includes(update.phase);
+  const openReleasePage = async () => {
+    if (!update.release) return;
+    try { await Linking.openURL(update.release.url); }
+    catch { Alert.alert('打开失败', '暂时无法打开 GitHub，请稍后重试。'); }
+  };
   const savedCount = useCaptureStore((state) => state.savedUris.length);
   const favoriteCount = useCaptureStore((state) => state.favoriteUris.length);
   const styleCount = Object.keys(CAMERA_STYLES).length;
@@ -142,13 +155,13 @@ export function ProfilePage() {
             <View style={styles.dialogCard} accessibilityViewIsModal>
               <View style={styles.dialogHeader}>
                 <View style={styles.dialogIcon}>
-                  <Ionicons name={dialog === 'feedback' ? 'mail-outline' : 'camera-outline'} size={24} color={colors.secondary} />
+                  <Ionicons name={dialog === 'feedback' ? 'mail-outline' : dialog === 'update' ? 'download-outline' : 'camera-outline'} size={24} color={colors.secondary} />
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="关闭" onPress={closeDialog} style={styles.dialogClose}>
                   <Ionicons name="close" size={22} color={colors.onSurfaceVariant} />
                 </Pressable>
               </View>
-              <Text accessibilityRole="header" style={styles.dialogTitle}>{dialog === 'feedback' ? '意见反馈' : '关于Drama相机'}</Text>
+              <Text accessibilityRole="header" style={styles.dialogTitle}>{dialog === 'feedback' ? '意见反馈' : dialog === 'update' ? '发现新版本' : '关于Drama相机'}</Text>
               <ScrollView style={styles.dialogBody} contentContainerStyle={styles.dialogBodyContent}>
                 {dialog === 'feedback' ? (
                   <>
@@ -157,13 +170,52 @@ export function ProfilePage() {
                       <Text selectable style={styles.emailAddress}>tommy_cui@foxmail.com</Text>
                     </View>
                   </>
+                ) : dialog === 'about' ? (
+                  <>
+                    <Text selectable style={styles.dialogDescription}>{ABOUT_TEXT}</Text>
+                    <Text style={styles.versionText}>当前版本 {update.currentVersion}</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel="检查更新" disabled={update.phase === 'checking'}
+                      onPress={() => { void update.check().then(available => { if (available) setDialog('update'); }); }}
+                      style={({ pressed }) => [styles.checkUpdate, pressed && styles.dialogConfirmPressed]}>
+                      {update.phase === 'checking' ? <ActivityIndicator size="small" color={colors.secondary} /> : <Ionicons name="refresh-outline" size={17} color={colors.secondary} />}
+                      <Text style={styles.checkUpdateText}>{update.phase === 'checking' ? '正在检查…' : '检查更新'}</Text>
+                    </Pressable>
+                    {Boolean(update.message) && <Text accessibilityLiveRegion="polite" style={styles.updateMessage}>{update.message}</Text>}
+                  </>
                 ) : (
-                  <Text selectable style={styles.dialogDescription}>{ABOUT_TEXT}</Text>
+                  <>
+                    <Text style={styles.releaseVersion}>{update.release?.title || `v${update.release?.version}`}</Text>
+                    <Text style={styles.versionText}>{update.currentVersion} → {update.release?.version}</Text>
+                    {Boolean(update.release?.notes) && <Text selectable style={styles.dialogDescription}>{update.release?.notes}</Text>}
+                    {update.release?.asset && <Text style={styles.versionText}>{update.release.asset.name} · {(update.release.asset.size / 1024 / 1024).toFixed(1)} MB</Text>}
+                    <Text style={styles.updateMessage}>{!update.release?.asset
+                      ? '此版本未提供适合当前设备的 APK，请查看 GitHub 发布页面。'
+                      : supportsAppInstallation ? '下载完成后会自动打开系统安装界面。'
+                      : Platform.OS === 'android' ? '当前运行环境无法自动安装，可前往 GitHub 下载 APK。'
+                      : '自动安装适用于 Android 安装版，可前往 GitHub 查看发布信息。'}</Text>
+                    {downloading && <View style={styles.downloadStatus} accessibilityLiveRegion="polite">
+                      <ActivityIndicator color={colors.secondary} />
+                      <Text style={styles.checkUpdateText}>{update.phase === 'verifying' ? '正在校验…' : update.progress === null ? '下载中…' : `${Math.floor(update.progress * 100)}%`}</Text>
+                    </View>}
+                    {update.phase === 'downloading' && update.progress !== null && <View style={styles.progressTrack} accessibilityRole="progressbar"
+                      accessibilityValue={{ min: 0, max: 100, now: Math.floor(update.progress * 100) }}>
+                      <View style={[styles.progressFill, { width: `${Math.floor(update.progress * 100)}%` }]} />
+                    </View>}
+                    {Boolean(update.message) && <Text accessibilityLiveRegion="polite" style={styles.updateMessage}>{update.message}</Text>}
+                  </>
                 )}
               </ScrollView>
-              <Pressable accessibilityRole="button" onPress={closeDialog} style={({ pressed }) => [styles.dialogConfirm, pressed && styles.dialogConfirmPressed]}>
-                <Text style={styles.dialogConfirmText}>知道了</Text>
+              <Pressable accessibilityRole="button" disabled={dialog === 'update' && downloading}
+                onPress={dialog !== 'update' ? closeDialog : !supportsAppInstallation || !update.release?.asset ? () => void openReleasePage()
+                  : installReady ? () => void update.install() : () => void update.download()}
+                style={({ pressed }) => [styles.dialogConfirm, (pressed || (dialog === 'update' && downloading)) && styles.dialogConfirmPressed]}>
+                <Text style={styles.dialogConfirmText}>{dialog !== 'update' ? '知道了' : downloading ? '正在处理…'
+                  : !supportsAppInstallation || !update.release?.asset ? '查看 GitHub 发布'
+                  : installReady ? update.phase === 'opened' ? '重新打开安装' : '继续安装' : update.phase === 'error' ? '重新下载并安装' : '下载并安装'}</Text>
               </Pressable>
+              {dialog === 'update' && <Pressable accessibilityRole="button" onPress={closeDialog} style={styles.updateCancel}>
+                <Text style={styles.versionText}>{downloading ? '取消下载' : '稍后再说'}</Text>
+              </Pressable>}
             </View>
           </SafeAreaView>
         )}
@@ -173,6 +225,15 @@ export function ProfilePage() {
 }
 
 const styles = StyleSheet.create({
+  versionText: { color: colors.subtle, fontSize: 12, lineHeight: 19, marginTop: 10 },
+  releaseVersion: { color: colors.primary, fontSize: 17, fontWeight: '600' },
+  checkUpdate: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', minHeight: 46, borderRadius: 16, backgroundColor: colors.butterWarm, marginTop: 16 },
+  checkUpdateText: { color: colors.secondary, fontSize: 14, fontWeight: '600' },
+  updateMessage: { color: colors.onSurfaceVariant, fontSize: 12, lineHeight: 21, marginTop: 12 },
+  downloadStatus: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 18 },
+  progressTrack: { height: 5, borderRadius: 3, backgroundColor: colors.surfaceHighest, overflow: 'hidden', marginTop: 12 },
+  progressFill: { height: '100%', backgroundColor: colors.secondary },
+  updateCancel: { alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   dialogBackdrop: {
     flex: 1,
     justifyContent: 'center',

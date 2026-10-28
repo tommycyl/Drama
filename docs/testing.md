@@ -1,5 +1,7 @@
 # 检查与真机验收
 
+GitHub 更新检查与 APK 安装验收见[应用更新](app-updates.md)。
+
 在frontend目录执行：
 
 ```powershell
