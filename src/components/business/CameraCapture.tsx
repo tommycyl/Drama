@@ -17,7 +17,7 @@ import { CAMERA_STYLES } from '../../constants/guidance';
 import type { CameraStyle } from '../../types/guidance';
 import { useCameraGuidance } from '../../hooks/useCameraGuidance';
 import { CameraGuidanceControls } from './CameraGuidanceControls';
-import { CameraParameterPanel } from './CameraParameterPanel';
+import { CameraParameterPanel, type Parameter } from './CameraParameterPanel';
 import { CameraDirectionOverlay } from './CameraDirectionOverlay';
 import { CameraReadyFrame, CameraReadyNotice, CameraShutterHalo } from './CameraReadyEffects';
 import { digitalZoomFactor } from '../../lib/cameraGeometry';
@@ -73,6 +73,11 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
   const viewfinderAspect = viewfinder.height > 0 ? viewfinder.width / viewfinder.height : 3 / 4;
   const guide = useCameraGuidance(cameraRef, onCapture, viewfinderAspect);
   const [tuningOpen, setTuningOpen] = useState(false);
+  const [tuningParameter, setTuningParameter] = useState<Parameter>('zoom');
+  const openTuning = (parameter: Parameter) => {
+    setTuningParameter(parameter);
+    setTuningOpen(true);
+  };
   const savedUris = useCaptureStore((state) => state.savedUris);
   const galleryThumb = savedUris[0];
 
@@ -102,13 +107,14 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
     ? WHITE_BALANCE_LABEL[guide.appliedTuning.whiteBalance] ?? '自动'
     : '自动';
   const contrast = guide.appliedTuning?.contrast != null ? guide.appliedTuning.contrast.toFixed(2) : '系统';
-  const params = [
-    { label: '变焦', value: `${digitalZoomFactor(context.zoom).toFixed(1)}x` },
-    { label: '光圈', value: aperture ? `f/${aperture}` : '自动' },
-    { label: '白平衡', value: whiteBalance },
-    { label: '对比度', value: contrast },
-    { label: '闪光灯', value: context.flash === 'on' ? '开' : context.flash === 'auto' ? '自动' : '关' },
+  const params: { id: Parameter; label: string; value: string }[] = [
+    { id: 'zoom', label: '变焦', value: `${digitalZoomFactor(context.zoom).toFixed(1)}x` },
+    { id: 'aperture', label: '光圈', value: aperture ? `f/${aperture}` : '自动' },
+    { id: 'whiteBalance', label: '白平衡', value: whiteBalance },
+    { id: 'contrast', label: '对比度', value: contrast },
   ];
+  const flashLabel = context.flash === 'on' ? '开' : context.flash === 'auto' ? '自动' : '关';
+  const flashDisabled = blocked || guide.executionPhase === 'parameters';
   const activeZoomStep = ZOOM_STEPS.findIndex((step) => Math.abs(step - context.zoom) < 0.06);
 
   return (
@@ -323,7 +329,7 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
                 accessibilityLabel="微调相机参数"
                 accessibilityState={{ expanded: tuningOpen }}
                 disabled={blocked || guide.executionPhase === 'parameters'}
-                onPress={() => setTuningOpen(true)}
+                onPress={() => openTuning('zoom')}
                 style={({ pressed }) => [styles.tuneButton, (blocked || pressed) && { opacity: 0.7 }]}
               >
                 <Ionicons name="options-outline" size={13} color={colors.onSurfaceVariant} />
@@ -333,15 +339,34 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
 
             <View style={styles.paramRow}>
               {params.map((param) => (
-                <View key={param.label} style={styles.paramCell}>
+                <Pressable key={param.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`调整${param.label}，当前${param.value}`}
+                  accessibilityState={{ disabled: blocked || guide.executionPhase === 'parameters' }}
+                  disabled={blocked || guide.executionPhase === 'parameters'}
+                  onPress={() => openTuning(param.id)}
+                  style={({ pressed }) => [styles.paramCell, pressed && styles.disabled]}>
                   <Text style={styles.paramLabel}>
                     {param.label}
                   </Text>
                   <Text style={styles.paramValue} numberOfLines={1} adjustsFontSizeToFit>
                     {param.value}
                   </Text>
-                </View>
+                </Pressable>
               ))}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`闪光灯${flashLabel}，点击${context.flash === 'on' ? '关闭' : '开启'}`}
+                accessibilityState={{ disabled: flashDisabled, selected: context.flash === 'on' }}
+                disabled={flashDisabled}
+                onPress={() => void guide.adjustParameters({ flash: context.flash === 'on' ? 'off' : 'on' })}
+                style={({ pressed }) => [styles.paramCell, styles.flashCell,
+                  context.flash === 'on' && styles.flashCellActive,
+                  (flashDisabled || pressed) && styles.disabled]}
+              >
+                <Text style={styles.paramLabel}>闪光灯</Text>
+                <Text style={styles.paramValue} numberOfLines={1} adjustsFontSizeToFit>{flashLabel}</Text>
+              </Pressable>
             </View>
 
             <Text style={styles.tuningText} numberOfLines={1}>
@@ -457,7 +482,7 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
           </View>
         </View>
       </SafeAreaView>
-      {tuningOpen && <CameraParameterPanel visible={tuningOpen} context={context}
+      {tuningOpen && <CameraParameterPanel visible={tuningOpen} initialParameter={tuningParameter} context={context}
         appliedTuning={guide.appliedTuning} disabled={blocked || guide.executionPhase === 'parameters'}
         busy={guide.adjustingParameters} message={guide.tuningMessage}
         onClose={() => setTuningOpen(false)} onChange={guide.adjustParameters} />}
@@ -757,6 +782,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '500',
     letterSpacing: 0.7,
+  },
+  flashCell: {
+    borderWidth: 1,
+    borderColor: colors.secondaryFixedDim,
+  },
+  flashCellActive: {
+    backgroundColor: colors.secondaryContainer,
   },
   paramValue: {
     color: colors.primary,

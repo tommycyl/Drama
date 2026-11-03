@@ -9,13 +9,11 @@ import type { CameraCapabilities, GuidanceContext } from '../../types/guidance';
 import type { ManualCameraSettings } from '../../hooks/useCameraGuidance';
 
 const WB_LABELS: Record<string, string> = { auto: '自动', daylight: '日光', cloudy: '阴天', tungsten: '钨丝灯', fluorescent: '荧光灯' };
-const FLASH = ['off', 'auto', 'on'] as const;
-const FLASH_LABELS = ['关', '自动', '开'];
 const PARAMETERS = [
   { id: 'zoom', label: '变焦' }, { id: 'aperture', label: '光圈' },
-  { id: 'whiteBalance', label: '白平衡' }, { id: 'contrast', label: '对比度' }, { id: 'flash', label: '闪光灯' },
+  { id: 'whiteBalance', label: '白平衡' }, { id: 'contrast', label: '对比度' },
 ] as const;
-type Parameter = typeof PARAMETERS[number]['id'];
+export type Parameter = typeof PARAMETERS[number]['id'];
 
 export function ParameterWheel({ value, max, disabled, label, valueText, formatValue, onChange, onCommit }: {
   value: number; max: number; disabled: boolean; label: string; valueText: string;
@@ -137,13 +135,14 @@ export function ParameterWheel({ value, max, disabled, label, valueText, formatV
   );
 }
 
-export function CameraParameterPanel({ visible, context, appliedTuning, disabled, busy, message, onClose, onChange }: {
+export function CameraParameterPanel({ visible, initialParameter = 'zoom', context, appliedTuning, disabled, busy, message, onClose, onChange }: {
+  initialParameter?: Parameter;
   visible: boolean; context: GuidanceContext; appliedTuning: ManualCameraSettings | null;
   disabled: boolean; busy: boolean; message: string; onClose: () => void;
   onChange: (change: ManualCameraSettings) => Promise<void>;
 }) {
   const insets = useSafeAreaInsets();
-  const [selected, setSelected] = useState<Parameter>('zoom');
+  const [selected, setSelected] = useState<Parameter>(initialParameter);
   const [draft, setDraft] = useState(0);
   const caps: CameraCapabilities = context.capabilities ?? SYSTEM_CAMERA_CAPABILITIES;
   const apertures = [...caps.apertures].sort((a, b) => a - b);
@@ -153,12 +152,11 @@ export function CameraParameterPanel({ visible, context, appliedTuning, disabled
     aperture: Math.max(0, apertures.indexOf(appliedTuning?.aperture ?? apertures[0])),
     whiteBalance: Math.max(0, wb.indexOf(appliedTuning?.whiteBalance === 'keep' ? 'auto' : appliedTuning?.whiteBalance ?? 'auto')),
     contrast: Math.round(((appliedTuning?.contrast ?? 1) - 0.8) * 100),
-    flash: FLASH.indexOf(context.flash),
   };
-  const max: Record<Parameter, number> = { zoom: 300, aperture: Math.max(0, apertures.length - 1), whiteBalance: Math.max(0, wb.length - 1), contrast: 40, flash: 2 };
+  const max: Record<Parameter, number> = { zoom: 300, aperture: Math.max(0, apertures.length - 1), whiteBalance: Math.max(0, wb.length - 1), contrast: 40 };
   const available: Record<Parameter, boolean> = {
     zoom: true, aperture: caps.native && apertures.length > 1,
-    whiteBalance: caps.native && wb.length > 1, contrast: caps.native && caps.contrast, flash: true,
+    whiteBalance: caps.native && wb.length > 1, contrast: caps.native && caps.contrast,
   };
   const actual = values[selected];
   useEffect(() => { setDraft(actual); }, [visible, selected, actual, busy]);
@@ -168,7 +166,6 @@ export function CameraParameterPanel({ visible, context, appliedTuning, disabled
       case 'aperture': return apertures[value] ? `f/${apertures[value]}` : '自动';
       case 'whiteBalance': return WB_LABELS[wb[value]] ?? '自动';
       case 'contrast': return (0.8 + value / 100).toFixed(2);
-      case 'flash': return FLASH_LABELS[value];
     }
   };
   const commit = (value: number) => {
@@ -176,8 +173,7 @@ export function CameraParameterPanel({ visible, context, appliedTuning, disabled
     const change: ManualCameraSettings = selected === 'zoom' ? { zoom: value / 300 }
       : selected === 'aperture' ? { aperture: apertures[value] }
       : selected === 'whiteBalance' ? { whiteBalance: wb[value] }
-      : selected === 'contrast' ? { contrast: Number((0.8 + value / 100).toFixed(2)) }
-      : { flash: FLASH[value] };
+      : { contrast: Number((0.8 + value / 100).toFixed(2)) };
     void onChange(change);
   };
   return (
