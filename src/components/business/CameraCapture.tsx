@@ -69,8 +69,9 @@ function cueLabel(cue: ReturnType<typeof getDirectionCue>): string {
 }
 
 export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOpenGallery }: Props) {
-  const guide = useCameraGuidance(cameraRef, onCapture);
   const [viewfinder, setViewfinder] = useState({ width: 0, height: 0 });
+  const viewfinderAspect = viewfinder.height > 0 ? viewfinder.width / viewfinder.height : 3 / 4;
+  const guide = useCameraGuidance(cameraRef, onCapture, viewfinderAspect);
   const [tuningOpen, setTuningOpen] = useState(false);
   const savedUris = useCaptureStore((state) => state.savedUris);
   const galleryThumb = savedUris[0];
@@ -186,14 +187,15 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
                 collapsable={false}
                 style={[StyleSheet.absoluteFill, { transform: [{ scale: digitalZoomFactor(context.zoom) }] }]}
               >
-                {/* Expo mirrors the front preview even when captured photos use mirror=false. */}
+                {/* Omit ratio: Android otherwise switches from FILL_CENTER to FIT_CENTER
+                    and adds black bars when the responsive viewfinder is not 3:4.
+                    Expo mirrors the front preview even when photos use mirror=false. */}
                 <CameraView
                   ref={cameraRef}
                   style={[StyleSheet.absoluteFill, { transform: [{ scaleX: context.facing === 'front' ? -1 : 1 }] }]}
                   facing={context.facing}
                   zoom={0}
                   mirror={false}
-                  ratio="4:3"
                   flash={context.flash}
                   autofocus="off"
                   animateShutter={false}

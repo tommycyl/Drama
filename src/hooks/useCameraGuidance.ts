@@ -19,7 +19,8 @@ import type { CameraCapabilities, CameraMode, CameraStyle, Guidance, GuidanceCon
 type AppliedTuning = { aperture: number | null; whiteBalance: WhiteBalance | 'keep'; contrast: number | null };
 export type ManualCameraSettings = Partial<AppliedTuning> & { zoom?: number; flash?: GuidanceContext['flash'] };
 
-export function useCameraGuidance(cameraRef: React.RefObject<CameraView>, onCapture: (uri: string) => void) {
+export function useCameraGuidance(cameraRef: React.RefObject<CameraView>, onCapture: (uri: string) => void, viewfinderAspect = 3 / 4) {
+  const aspectRef = useRef(viewfinderAspect);
   const [context, setContext] = useState<GuidanceContext>({ style: '清透', mode: '人像', facing: 'back', zoom: 0, flash: 'off' });
   const contextRef = useRef(context);
   const [enabled, setEnabled] = useState(false);
@@ -154,6 +155,9 @@ export function useCameraGuidance(cameraRef: React.RefObject<CameraView>, onCapt
     stableAfter.current = Date.now() + GUIDANCE_SETTLE_MS;
     loop.current?.invalidate(message);
   }
+  useEffect(() => {
+    aspectRef.current = viewfinderAspect;
+  }, [viewfinderAspect]);
   function animateZoom(destination: number) {
     cancelZoom();
     const start = contextRef.current.zoom;
@@ -194,7 +198,7 @@ export function useCameraGuidance(cameraRef: React.RefObject<CameraView>, onCapt
           if (signal.aborted) throw new Error('取样已取消');
           commitContext({ ...contextRef.current, capabilities });
           setTuningMessage(capabilities.native ? '系统色彩 · 按镜头能力调整' : '系统色彩 · 当前安装包不支持手动参数');
-          return await captureAnalysisSample(cameraRef.current, queue.current, signal, contextRef.current.zoom);
+          return await captureAnalysisSample(cameraRef.current, queue.current, signal, contextRef.current.zoom, aspectRef.current);
         }
         finally { samplingRef.current = false; if (mounted.current) setSampling(false); }
       },
@@ -422,6 +426,8 @@ export function useCameraGuidance(cameraRef: React.RefObject<CameraView>, onCapt
   }
   async function capture() {
     if (captureRef.current || !readyRef.current || !activeRef.current || tuningBusy.current || manualBusy.current) return;
+    const aspect = aspectRef.current;
+    const zoom = contextRef.current.zoom;
     captureRef.current = true; setCapturing(true); cancelZoom(); resetStep(); loop.current?.stop();
     setStatus({ phase: 'waiting', message: '拍摄中，AI 分析已暂停' });
     try {
@@ -430,7 +436,7 @@ export function useCameraGuidance(cameraRef: React.RefObject<CameraView>, onCapt
         const picture = await cameraRef.current?.takePictureAsync({ quality: 0.9, skipProcessing: false });
         if (!picture?.uri) throw new Error('没有获取到照片');
         if (!mounted.current || !activeRef.current) { await removeSampleFile(picture.uri); return; }
-        const uri = await prepareCapturedPhoto(picture, contextRef.current.zoom);
+        const uri = await prepareCapturedPhoto(picture, zoom, aspect);
         if (!mounted.current || !activeRef.current) { await removeSampleFile(uri); return; }
         onCapture(uri);
       });

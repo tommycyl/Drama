@@ -17,9 +17,10 @@ export function getCameraViewport(width: number, height: number, topInset: numbe
   };
 }
 
-export function getPhotoCrop(width: number, height: number, zoom: number) {
+export function getPhotoCrop(width: number, height: number, zoom: number, aspect = 3 / 4) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) throw new Error('相机图片尺寸无效。');
-  const aspect = 3 / 4;
+  if (!Number.isFinite(aspect) || aspect <= 0) throw new Error('取景框比例无效。');
+  // Match the native center-fill preview, then apply the same digital zoom.
   const baseWidth = Math.min(width, height * aspect);
   const baseHeight = baseWidth / aspect;
   const factor = digitalZoomFactor(zoom);
