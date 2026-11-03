@@ -186,7 +186,7 @@ export function CameraParameterPanel({ visible, context, appliedTuning, disabled
         <Pressable accessibilityRole="button" accessibilityLabel="关闭微调面板" style={styles.backdrop} onPress={onClose} />
         <View accessibilityViewIsModal style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom) }]}>
           <View style={styles.handle} />
-          <ScrollView bounces={false} contentContainerStyle={styles.content}>
+          <ScrollView style={styles.scroll} bounces={false} contentContainerStyle={styles.content}>
             <View style={styles.heading}>
               <View><Text style={styles.title}>相机微调</Text><Text style={styles.subtitle}>选择参数，左右拨动滚轮</Text></View>
               <Pressable accessibilityRole="button" accessibilityLabel="完成微调" onPress={onClose} style={styles.done}><Text style={styles.doneText}>完成</Text></Pressable>
@@ -224,8 +224,11 @@ export function CameraParameterPanel({ visible, context, appliedTuning, disabled
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(24,22,18,0.28)' },
-  sheet: { maxHeight: '80%', width: '100%', maxWidth: 600, alignSelf: 'center', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: colors.surface },
+  // Keep the bottom sheet anchored at the same height as feedback changes.
+  // Small screens and larger text can scroll without moving the sheet itself.
+  sheet: { height: 520, maxHeight: '80%', width: '100%', maxWidth: 600, alignSelf: 'center', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: colors.surface },
   handle: { alignSelf: 'center', width: 32, height: 4, borderRadius: 2, backgroundColor: colors.outlineVariant, marginTop: 10 },
+  scroll: { flex: 1 },
   content: { padding: 22 },
   heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { color: colors.ink, fontSize: 20, fontWeight: '700' },
@@ -264,7 +267,7 @@ const styles = StyleSheet.create({
   wheelIndex: { position: 'absolute', bottom: 2, left: '50%', marginLeft: -1, width: 2, height: 6, borderRadius: 1, backgroundColor: colors.secondary },
   endpoints: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 8 },
   endpoint: { color: colors.subtle, fontSize: 11 },
-  feedback: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 22 },
+  feedback: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 22 },
   hint: { flex: 1, color: colors.muted, fontSize: 12, lineHeight: 19 },
   note: { color: colors.subtle, fontSize: 11, lineHeight: 18, marginTop: 9 },
   disabled: { opacity: 0.35 },
