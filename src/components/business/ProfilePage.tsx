@@ -43,8 +43,8 @@ export function ProfilePage() {
   const installReady = ['permission', 'downloaded', 'opened'].includes(update.phase);
   const openReleasePage = async () => {
     if (!update.release) return;
-    try { await Linking.openURL(update.release.url); }
-    catch { Alert.alert('打开失败', '暂时无法打开 GitHub，请稍后重试。'); }
+    try { await Linking.openURL(update.release.asset?.url ?? update.release.url); }
+    catch { Alert.alert('打开失败', '暂时无法打开下载链接，请稍后重试。'); }
   };
   const savedCount = useCaptureStore((state) => state.savedUris.length);
   const favoriteCount = useCaptureStore((state) => state.favoriteUris.length);
@@ -187,12 +187,12 @@ export function ProfilePage() {
                     <Text style={styles.releaseVersion}>{update.release?.title || `v${update.release?.version}`}</Text>
                     <Text style={styles.versionText}>{update.currentVersion} → {update.release?.version}</Text>
                     {Boolean(update.release?.notes) && <Text selectable style={styles.dialogDescription}>{update.release?.notes}</Text>}
-                    {update.release?.asset && <Text style={styles.versionText}>{update.release.asset.name} · {(update.release.asset.size / 1024 / 1024).toFixed(1)} MB</Text>}
+                    {update.release?.asset && <Text selectable style={styles.versionText}>{update.release.asset.url}{update.release.asset.size > 0 ? ` · ${(update.release.asset.size / 1024 / 1024).toFixed(1)} MB` : ''}</Text>}
                     <Text style={styles.updateMessage}>{!update.release?.asset
-                      ? '此版本未提供适合当前设备的 APK，请查看 GitHub 发布页面。'
+                      ? '此版本暂未提供可下载的 APK。'
                       : supportsAppInstallation ? '下载完成后会自动打开系统安装界面。'
-                      : Platform.OS === 'android' ? '当前运行环境无法自动安装，可前往 GitHub 下载 APK。'
-                      : '自动安装适用于 Android 安装版，可前往 GitHub 查看发布信息。'}</Text>
+                      : Platform.OS === 'android' ? '当前运行环境无法自动安装，可前往浏览器直接下载 APK。'
+                      : '自动安装适用于 Android 安装版，可复制或打开下载链接获取 APK。'}</Text>
                     {downloading && <View style={styles.downloadStatus} accessibilityLiveRegion="polite">
                       <ActivityIndicator color={colors.secondary} />
                       <Text style={styles.checkUpdateText}>{update.phase === 'verifying' ? '正在校验…' : update.progress === null ? '下载中…' : `${Math.floor(update.progress * 100)}%`}</Text>
@@ -210,7 +210,7 @@ export function ProfilePage() {
                   : installReady ? () => void update.install() : () => void update.download()}
                 style={({ pressed }) => [styles.dialogConfirm, (pressed || (dialog === 'update' && downloading)) && styles.dialogConfirmPressed]}>
                 <Text style={styles.dialogConfirmText}>{dialog !== 'update' ? '知道了' : downloading ? '正在处理…'
-                  : !supportsAppInstallation || !update.release?.asset ? '查看 GitHub 发布'
+                  : !supportsAppInstallation || !update.release?.asset ? '浏览器下载 APK'
                   : installReady ? update.phase === 'opened' ? '重新打开安装' : '继续安装' : update.phase === 'error' ? '重新下载并安装' : '下载并安装'}</Text>
               </Pressable>
               {dialog === 'update' && <Pressable accessibilityRole="button" onPress={closeDialog} style={styles.updateCancel}>

@@ -36,7 +36,7 @@ export async function removeUpdateFile(uri: string) {
 
 export async function downloadAppUpdate(asset: ReleaseAsset, signal: AbortSignal, onProgress: (progress: number | null) => void, onVerify: () => void) {
   if (!native || !FileSystem.cacheDirectory) throw new Error('当前环境不支持下载并安装 APK。');
-  if (!isReleaseUrl(asset.url, true) || !Number.isSafeInteger(asset.id) || asset.id <= 0 || !Number.isSafeInteger(asset.size) || asset.size <= 0) throw new Error('安装包下载信息无效。');
+  if (!isReleaseUrl(asset.url, true) || !Number.isSafeInteger(asset.id) || asset.id <= 0 || !Number.isSafeInteger(asset.size) || asset.size < 0) throw new Error('安装包下载信息无效。');
   const directory = `${FileSystem.cacheDirectory}updates/`;
   const uri = `${directory}drama-${asset.id}-${Date.now()}.apk`;
   await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
@@ -55,7 +55,7 @@ export async function downloadAppUpdate(asset: ReleaseAsset, signal: AbortSignal
     if (signal.aborted) throw new Error('下载已取消。');
     if (!result || result.status !== 200) throw new Error('安装包下载失败，请检查网络后重试。');
     const info = await FileSystem.getInfoAsync(uri);
-    if (!info.exists || info.isDirectory || info.size !== asset.size) throw new Error('安装包下载不完整，请重新下载。');
+    if (!info.exists || info.isDirectory || info.size <= 0 || (asset.size > 0 && info.size !== asset.size)) throw new Error('安装包下载不完整，请重新下载。');
     onVerify();
     await native.verifyPackage(uri, asset.sha256);
     if (signal.aborted) throw new Error('下载已取消。');

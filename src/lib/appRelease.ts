@@ -1,4 +1,5 @@
 export const RELEASES_URL = 'https://github.com/tommycyl/Drama/releases';
+export const APK_DOWNLOAD_BASE_URL = 'https://pic.tommy.xx.kg';
 const REPOSITORY_PATH = '/tommycyl/Drama/releases/';
 const LATEST_RELEASE_API = 'https://api.github.com/repos/tommycyl/Drama/releases/latest';
 
@@ -13,6 +14,12 @@ function versionParts(value: string) {
   return parts;
 }
 
+export function buildApkDownloadUrl(version: string): string {
+  const normalized = version.trim().replace(/^v/i, '');
+  versionParts(normalized);
+  return `${APK_DOWNLOAD_BASE_URL}/v${normalized}.apk`;
+}
+
 export function isNewerVersion(candidate: string, installed: string): boolean {
   const next = versionParts(candidate), current = versionParts(installed);
   for (let index = 0; index < 3; index++) {
@@ -25,46 +32,38 @@ export function isReleaseUrl(value: unknown, download = false): value is string 
   if (typeof value !== 'string') return false;
   try {
     const url = new URL(value);
+    if (download) {
+      return url.protocol === 'https:' && url.hostname === 'pic.tommy.xx.kg' && !url.username && !url.password && !url.port
+        && /^\/v\d+(?:\.\d+){0,2}(?:\+[\w.-]+)?\.apk$/i.test(url.pathname);
+    }
     return url.protocol === 'https:' && url.hostname === 'github.com' && !url.username && !url.password && !url.port
-      && url.pathname.startsWith(`${REPOSITORY_PATH}${download ? 'download/' : 'tag/'}`);
+      && url.pathname.startsWith(`${REPOSITORY_PATH}tag/`);
   } catch { return false; }
 }
 
-function assetArchitecture(name: string): string | null {
-  if (/arm64(?:-v8a)?|aarch64/i.test(name)) return 'arm64-v8a';
-  if (/armeabi(?:-v7a)?|armv7/i.test(name)) return 'armeabi-v7a';
-  if (/x86[_-]64|amd64/i.test(name)) return 'x86_64';
-  if (/x86/i.test(name)) return 'x86';
-  return null;
-}
-
-export function parseRelease(value: unknown, supportedAbis: string[] = []): AppRelease {
+export function parseRelease(value: unknown, _supportedAbis: string[] = []): AppRelease {
   if (!value || typeof value !== 'object') throw new Error('GitHub 返回的版本信息不完整。');
   const release = value as Record<string, unknown>;
   if (release.draft || release.prerelease || typeof release.tag_name !== 'string' || !isReleaseUrl(release.html_url)) {
     throw new Error('未找到可用的正式发布版本。');
   }
-  versionParts(release.tag_name);
-  const assets: ReleaseAsset[] = [];
-  for (const raw of Array.isArray(release.assets) ? release.assets : []) {
-    if (!raw || typeof raw !== 'object') continue;
-    const asset = raw as Record<string, unknown>;
-    if (typeof asset.name !== 'string' || !/\.apk$/i.test(asset.name) || !Number.isSafeInteger(asset.id) || (asset.id as number) <= 0
-      || typeof asset.size !== 'number' || !Number.isSafeInteger(asset.size) || asset.size <= 0 || !isReleaseUrl(asset.browser_download_url, true)
-      || asset.state !== 'uploaded') continue;
-    const digest = typeof asset.digest === 'string' && /^sha256:[a-f\d]{64}$/i.test(asset.digest)
-      ? asset.digest.slice(7).toLowerCase() : null;
-    assets.push({ id: asset.id as number, name: asset.name, size: asset.size, url: asset.browser_download_url, sha256: digest });
-  }
-  const universal = assets.filter(asset => /universal/i.test(asset.name) || !assetArchitecture(asset.name));
-  const asset = universal.length === 1 ? universal[0]
-    : supportedAbis.map(abi => assets.find(item => assetArchitecture(item.name) === abi)).find(Boolean) ?? null;
+  const parts = versionParts(release.tag_name);
+  const version = release.tag_name.trim().replace(/^v/i, '');
+  const apkName = `v${version}.apk`;
+  const downloadUrl = buildApkDownloadUrl(version);
+  const assetId = Math.max(1, parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]);
   return {
-    version: release.tag_name.replace(/^v/i, ''),
-    title: typeof release.name === 'string' ? release.name.slice(0, 160) : release.tag_name,
+    version,
+    title: typeof release.name === 'string' && release.name.trim() ? release.name.slice(0, 160) : `v${version}`,
     notes: typeof release.body === 'string' ? release.body.slice(0, 4000) : '',
-    url: release.html_url,
-    asset,
+    url: downloadUrl,
+    asset: {
+      id: assetId,
+      name: apkName,
+      size: 0,
+      url: downloadUrl,
+      sha256: null,
+    },
   };
 }
 
