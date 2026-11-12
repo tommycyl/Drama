@@ -8,10 +8,18 @@ type Props = {
   enabled: boolean; starting: boolean; disabled: boolean; autoZoom: boolean;
   status: GuidanceStatus; configMissing: boolean;
   onToggle: () => void; onAutoZoom: () => void; onRefresh: () => void; onConfigure: () => void;
+  poseEnabled?: boolean; poseStarting?: boolean; poseWorking?: boolean;
+  poseError?: string; poseConfigMissing?: boolean;
+  onTogglePose?: () => void;
 };
 
 export function CameraGuidanceControls(props: Props) {
   const working = props.starting || props.status.phase === 'sampling' || props.status.phase === 'analyzing';
+  const showError = props.status.phase === 'error' || Boolean(props.poseError);
+  const statusText = props.status.phase === 'error'
+    ? props.status.message
+    : props.poseError || props.status.message;
+  const needConfig = props.configMissing || Boolean(props.poseConfigMissing);
   return <View style={styles.container}>
     <View style={styles.row}>
       <Pressable accessibilityRole="switch" accessibilityLabel="AI 拍摄指导" accessibilityState={{ checked: props.enabled }}
@@ -24,12 +32,21 @@ export function CameraGuidanceControls(props: Props) {
         <Ionicons name="scan-outline" size={14} color={props.autoZoom ? colors.secondaryFixed : colors.onSurfaceVariant} />
         <Text style={[styles.text, props.autoZoom && styles.textSelected]}>自动变焦{props.autoZoom ? ' 开' : ' 关'}</Text>
       </Pressable>
+      {props.onTogglePose && (
+        <Pressable accessibilityRole="switch" accessibilityLabel="姿势指引" accessibilityState={{ checked: Boolean(props.poseEnabled) }}
+          disabled={props.disabled || props.poseStarting} onPress={props.onTogglePose} style={[styles.button, props.poseEnabled && styles.selected]}>
+          {props.poseStarting || props.poseWorking
+            ? <ActivityIndicator size="small" color={colors.secondaryFixed} />
+            : <Ionicons name="body-outline" size={14} color={props.poseEnabled ? colors.secondaryFixed : colors.onSurfaceVariant} />}
+          <Text style={[styles.text, props.poseEnabled && styles.textSelected]}>{props.poseStarting ? '连接中' : `姿势指引${props.poseEnabled ? ' 开' : ' 关'}`}</Text>
+        </Pressable>
+      )}
       {props.enabled && <Pressable accessibilityRole="button" accessibilityLabel="重新规划" disabled={props.disabled || working}
         onPress={props.onRefresh} style={styles.button}><Ionicons name="refresh-outline" size={15} color={colors.onSurfaceVariant} /><Text style={styles.text}>重新规划</Text></Pressable>}
     </View>
-    {(props.enabled || props.status.phase === 'error') && <Text testID="guidance-request-status" accessibilityLiveRegion="polite"
-      style={props.status.phase === 'error' ? styles.error : styles.status}>{props.status.message}</Text>}
-    {props.configMissing && <Pressable accessibilityRole="button" onPress={props.onConfigure} style={styles.configButton}>
+    {(props.enabled || showError) && <Text testID="guidance-request-status" accessibilityLiveRegion="polite"
+      style={showError ? styles.error : styles.status}>{statusText}</Text>}
+    {needConfig && <Pressable accessibilityRole="button" onPress={props.onConfigure} style={styles.configButton}>
       <Text style={styles.configText}>前往 AI 配置</Text>
     </Pressable>}
   </View>;

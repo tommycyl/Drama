@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
   Pressable,
   StyleSheet,
   Text,
+  Vibration,
   View,
 } from 'react-native';
 import { CameraView } from 'expo-camera';
@@ -16,13 +17,14 @@ import { colors, shadows } from '../../constants/theme';
 import { CAMERA_STYLES } from '../../constants/guidance';
 import type { CameraStyle } from '../../types/guidance';
 import { useCameraGuidance } from '../../hooks/useCameraGuidance';
+import { usePoseGuidance } from '../../hooks/usePoseGuidance';
 import { CameraGuidanceControls } from './CameraGuidanceControls';
 import { CameraParameterPanel, type Parameter } from './CameraParameterPanel';
 import { CameraDirectionOverlay } from './CameraDirectionOverlay';
-import { CameraReadyFrame, CameraReadyNotice, CameraShutterHalo } from './CameraReadyEffects';
+import { CameraReadyFrame, CameraShutterHalo } from './CameraReadyEffects';
+import { PoseGuideOverlay } from './PoseGuideOverlay';
 import { digitalZoomFactor } from '../../lib/cameraGeometry';
 import { getCompositionMessage } from '../../lib/compositionMessage';
-import { getDirectionCue } from '../../lib/guidanceDirection';
 import { useCaptureStore } from '../../store/captureStore';
 
 type Props = {
@@ -45,33 +47,16 @@ const WHITE_BALANCE_LABEL: Record<string, string> = {
   fluorescent: '荧光灯',
 };
 
-function cueIcon(cue: ReturnType<typeof getDirectionCue>): keyof typeof Ionicons.glyphMap {
-  if (cue.kind === 'move') {
-    if (Math.abs(cue.x) >= Math.abs(cue.y)) return cue.x < 0 ? 'arrow-back' : 'arrow-forward';
-    return cue.y < 0 ? 'arrow-up' : 'arrow-down';
-  }
-  if (cue.kind === 'tilt') return cue.y < 0 ? 'arrow-up' : 'arrow-down';
-  if (cue.kind === 'distance') return cue.y < 0 ? 'arrow-up' : 'arrow-down';
-  if (cue.kind === 'zoom') return 'search-outline';
-  return 'ellipse-outline';
-}
-
-function cueLabel(cue: ReturnType<typeof getDirectionCue>): string {
-  if (cue.kind === 'move') {
-    const horizontal = cue.x < 0 ? '左' : cue.x > 0 ? '右' : '';
-    const vertical = cue.y < 0 ? '上' : cue.y > 0 ? '下' : '';
-    return `${horizontal}${vertical}移`;
-  }
-  if (cue.kind === 'tilt') return cue.y < 0 ? '微仰' : '微俯';
-  if (cue.kind === 'distance') return cue.y < 0 ? '靠近' : '远离';
-  if (cue.kind === 'zoom') return '变焦';
-  return '';
-}
-
 export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOpenGallery }: Props) {
   const [viewfinder, setViewfinder] = useState({ width: 0, height: 0 });
   const viewfinderAspect = viewfinder.height > 0 ? viewfinder.width / viewfinder.height : 3 / 4;
   const guide = useCameraGuidance(cameraRef, onCapture, viewfinderAspect);
+  const pose = usePoseGuidance({
+    sampleFrame: guide.sampleFrame,
+    context: guide.context,
+    cameraReady: guide.ready && !guide.switching && !guide.capturing,
+    active: guide.active,
+  });
   const [tuningOpen, setTuningOpen] = useState(false);
   const [tuningParameter, setTuningParameter] = useState<Parameter>('zoom');
   const openTuning = (parameter: Parameter) => {
@@ -98,9 +83,9 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
   const bannerMessage = guide.enabled && guide.result && !canShoot
     ? `${message} · ${guide.result.advice.light}`
     : message;
-
-  const cue = guide.enabled && guide.result ? getDirectionCue(guide.result.advice) : null;
-  const showCue = cue && cue.kind !== 'hold' && cue.kind !== 'uncertain';
+  useEffect(() => {
+    if (canShoot) Vibration.vibrate(25);
+  }, [canShoot]);
 
   const aperture = guide.appliedTuning?.aperture ?? context.capabilities?.apertures[0] ?? null;
   const whiteBalance = guide.appliedTuning?.whiteBalance && guide.appliedTuning.whiteBalance !== 'keep'
@@ -174,6 +159,11 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
                 );
               })}
             </View>
+            {!guide.enabled && !pose.enabled && (
+              <Text style={styles.outsideHint} numberOfLines={1}>
+                开启 AI 指导，获取构图终点
+              </Text>
+            )}
           </View>
 
           {/* ── Live viewfinder ── */}
@@ -203,6 +193,8 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
                   zoom={0}
                   mirror={false}
                   flash={context.flash}
+                  // Flash only fires at capture; torch provides immediate rear-camera light.
+                  enableTorch={context.flash === 'on' && context.facing === 'back' && guide.active && guide.ready}
                   autofocus="off"
                   animateShutter={false}
                   onCameraReady={guide.cameraReady}
@@ -239,21 +231,18 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
               />
             </View>
 
-            {/* guidance banner */}
-            <View pointerEvents="box-none" style={styles.bannerWrap}>
-              <CameraReadyNotice
-                active={canShoot}
-                message={bannerMessage}
-                action={
-                  showCue && cue ? (
-                    <View style={styles.cueChip}>
-                      <Ionicons name={cueIcon(cue)} size={13} color={colors.secondaryFixed} />
-                      <Text style={styles.cueChipText}>{cueLabel(cue)}</Text>
-                    </View>
-                  ) : null
-                }
-              />
-            </View>
+            {/* pose guidance overlay in top-right */}
+            <PoseGuideOverlay
+              visible={pose.enabled}
+              phase={pose.phase}
+              message={pose.message}
+              suggestion={pose.current}
+              index={pose.index}
+              total={pose.recommendation?.poses.length ?? 0}
+              mirrored={context.facing === 'front'}
+              onNext={pose.next}
+              onRefresh={pose.refresh}
+            />
 
             {/* focal length pill */}
             <View style={styles.focalWrap}>
@@ -380,12 +369,22 @@ export function CameraCapture({ cameraRef, onClose, onCapture, onConfigure, onOp
             starting={guide.starting}
             disabled={guide.capturing || guide.adjustingParameters}
             autoZoom={guide.autoZoom}
-            status={guide.status}
+            status={
+              guide.enabled && guide.status.phase !== 'error' && guide.result
+                ? { phase: canShoot ? 'ready' : guide.status.phase, message: bannerMessage }
+                : guide.status
+            }
             configMissing={guide.configMissing}
             onToggle={() => void guide.toggleGuidance()}
             onAutoZoom={guide.toggleAutoZoom}
             onRefresh={guide.refresh}
             onConfigure={onConfigure}
+            poseEnabled={pose.enabled}
+            poseStarting={pose.starting}
+            poseWorking={pose.phase === 'waiting' || pose.phase === 'analyzing'}
+            poseError={pose.phase === 'error' ? pose.message : undefined}
+            poseConfigMissing={pose.configMissing}
+            onTogglePose={() => void pose.toggle()}
           />
 
           {/* ── Creative style strip ── */}
@@ -602,6 +601,15 @@ const styles = StyleSheet.create({
     color: colors.onSecondaryContainer,
     fontWeight: '700',
   },
+  outsideHint: {
+    flex: 1,
+    textAlign: 'right',
+    color: colors.onSurfaceVariant,
+    fontSize: 10,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    opacity: 0.82,
+  },
 
   /* viewfinder */
   viewfinderCard: {
@@ -627,29 +635,6 @@ const styles = StyleSheet.create({
     right: 0,
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(255, 255, 255, 0.28)',
-  },
-  bannerWrap: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    right: 12,
-    zIndex: 12,
-  },
-  cueChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: colors.primary,
-    ...shadows.glassSm,
-  },
-  cueChipText: {
-    color: colors.secondaryFixed,
-    fontSize: 9.5,
-    fontWeight: '600',
-    letterSpacing: 0.4,
   },
   focalWrap: {
     position: 'absolute',

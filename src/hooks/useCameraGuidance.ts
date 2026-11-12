@@ -448,7 +448,14 @@ export function useCameraGuidance(cameraRef: React.RefObject<CameraView>, onCapt
       if (mounted.current) { setCapturing(false); setEnabled(false); }
     }
   }
+  // One-off frame for other AI helpers (pose guide); shares the shot queue with capture.
+  async function sampleFrame(signal: AbortSignal) {
+    if (!cameraRef.current || !mounted.current || !readyRef.current || !activeRef.current || captureRef.current) {
+      throw new Error('相机尚未就绪，请稍后重试。');
+    }
+    return captureAnalysisSample(cameraRef.current, queue.current, signal, contextRef.current.zoom, aspectRef.current);
+  }
   return { context, enabled, autoZoom, adjustingZoom, adjustingParameters, ready, active, capturing, sampling, switching, starting, result, target, executionPhase, status, configMissing, sensorAvailable, tuningMessage, appliedTuning,
-    toggleGuidance, toggleAutoZoom, manualZoom, adjustParameters, changeStyle, changeMode, flipCamera, cameraReady, cameraError, capture, confirmAdjustment,
+    toggleGuidance, toggleAutoZoom, manualZoom, adjustParameters, changeStyle, changeMode, flipCamera, cameraReady, cameraError, capture, confirmAdjustment, sampleFrame,
     refresh: () => invalidate('正在重新规划当前画面') };
 }

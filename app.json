@@ -2,7 +2,7 @@
   "expo": {
     "name": "Drama相机",
     "slug": "warm-lens",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "warm-lens",
@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "com.warmlens.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#e5ce4d"

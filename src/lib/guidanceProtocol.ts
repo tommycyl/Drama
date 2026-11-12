@@ -10,7 +10,9 @@ type Schema = {
   type?: string; anyOf?: readonly Schema[]; enum?: readonly unknown[];
   required?: readonly string[]; properties?: Readonly<Record<string, Schema>>; additionalProperties?: boolean;
   minLength?: number; maxLength?: number; minimum?: number; maximum?: number;
+  items?: Schema; minItems?: number; maxItems?: number;
 };
+export function validateSchema(value: unknown, schema: Schema, path = 'response'): void { validate(value, schema, path); }
 function validate(value: unknown, schema: Schema, path: string): void {
   const fail = (reason: string): never => { throw new GuidanceProtocolError(`${path} ${reason}`); };
   if (schema.anyOf) {
@@ -18,7 +20,12 @@ function validate(value: unknown, schema: Schema, path: string): void {
     fail('类型或坐标不合法');
   }
   if (schema.type === 'null') { if (value !== null) fail('必须为 null'); return; }
-  if (schema.type === 'object') {
+  if (schema.type === 'array') {
+    if (!Array.isArray(value)) fail('必须为数组');
+    const list = value as unknown[];
+    if (list.length < (schema.minItems ?? 0) || list.length > (schema.maxItems ?? Infinity)) fail('数量不合法');
+    if (schema.items) list.forEach((item, index) => validate(item, schema.items!, `${path}[${index}]`));
+  } else if (schema.type === 'object') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) fail('必须为对象');
     const object = value as Record<string, unknown>;
     for (const key of schema.required ?? []) if (!Object.prototype.hasOwnProperty.call(object, key)) fail(`缺少 ${key}`);
